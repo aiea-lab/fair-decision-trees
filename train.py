@@ -41,7 +41,7 @@ def information_gain(parent, left_child, right_child):
     return entropy(parent) - (num_left * entropy(left_child) + num_right * entropy(right_child))
 
 
-def gain_calc(df_left, df_right, protected_index):
+def gain_calc(df_left, df_right, protected_index, disc_function=disc_func.discrimination):
     y = np.append(df_left, df_right, axis=0)[:, -1]
     y_left = df_left[:, -1]
     y_right = df_right[:, -1]
@@ -53,11 +53,11 @@ def gain_calc(df_left, df_right, protected_index):
     left_child = np.insert(df_left, -1, pred_left, axis=1)
     right_child = np.insert(df_right, -1, pred_right, axis=1)
     data = np.append(left_child, right_child, axis=0)
-    discrimination = disc_func.statParity_equalOdds(data, protected_index)
+    discrimination = disc_function(data, protected_index)
     gain = (info_gain + discrimination + 1)/2
     return gain
 
-def gain_disc_priority(df_left, df_right, protected_index):
+def gain_disc_priority(df_left, df_right, protected_index, disc_function=disc_func.discrimination):
     y = np.append(df_left, df_right, axis=0)[:, -1]
     y_left = df_left[:, -1]
     y_right = df_right[:, -1]
@@ -69,11 +69,11 @@ def gain_disc_priority(df_left, df_right, protected_index):
     left_child = np.insert(df_left, -1, pred_left, axis=1)
     right_child = np.insert(df_right, -1, pred_right, axis=1)
     data = np.append(left_child, right_child, axis=0)
-    discrimination = disc_func.statParity_equalOdds(data, protected_index)
+    discrimination = disc_function(data, protected_index)
     gain = (info_gain + 3*discrimination + 2)/4
     return gain
 
-def gain_info_priority(df_left, df_right, protected_index):
+def gain_info_priority(df_left, df_right, protected_index, disc_function=disc_func.discrimination):
     y = np.append(df_left, df_right, axis=0)[:, -1]
     y_left = df_left[:, -1]
     y_right = df_right[:, -1]
@@ -85,7 +85,7 @@ def gain_info_priority(df_left, df_right, protected_index):
     left_child = np.insert(df_left, -1, pred_left, axis=1)
     right_child = np.insert(df_right, -1, pred_right, axis=1)
     data = np.append(left_child, right_child, axis=0)
-    discrimination = disc_func.statParity_equalOdds(data, protected_index)
+    discrimination = disc_function(data, protected_index)
     gain = (3*info_gain + discrimination + 2)/4
     return gain
 

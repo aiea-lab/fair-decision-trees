@@ -2,6 +2,7 @@ import numpy as np
 
 def discrimination(data, discriminatory_index):
     return statParity_equalOdds(data, discriminatory_index)
+    # return statisticalParity(data, discriminatory_index)
 
 def accuracy(data):
     if len(data) == 0:

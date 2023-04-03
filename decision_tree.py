@@ -161,7 +161,7 @@ class Node:
         data = []
         if copy_data:
             for datum in self.data:
-                data.append(np.copy(self.datum))
+                data.append(np.copy(datum))
         if self.is_leaf():
             copy = Node(self.leaf, self.feature, self.threshold, data=data)
             return copy
