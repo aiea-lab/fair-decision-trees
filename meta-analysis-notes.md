@@ -75,3 +75,6 @@ By default we use Statistical Parity and Equalized Odds to get discrimination an
 ### Child Method Sex Discrimination Depth 6 (2.7s)
 
 ![Child Method Sex Discrimination](images/german_sex_child_method_depth_6.png)
+
+## Entropy vs Gini
+

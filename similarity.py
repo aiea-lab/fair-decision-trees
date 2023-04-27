@@ -28,5 +28,8 @@ def naive_discounted_similarity(before, after, discount=0.7, min_feature_score=0
     naive_score = 0
     if before.feature == after.feature:
         naive_score = min_feature_score
-        naive_score += 0.5 * min(before.threshold, after.threshold)/max(before.threshold, after.threshold)
+        if max([before.threshold, after.threshold])==0:
+            naive_score += 0
+        else:
+            naive_score += 0.5 * min(before.threshold, after.threshold)/max([before.threshold, after.threshold])
     return (1-discount)*naive_score+discount*0.5*(naive_discounted_similarity(before.less_node, after.less_node, discount, min_feature_score)+naive_discounted_similarity(before.greater_node, after.greater_node, discount, min_feature_score))

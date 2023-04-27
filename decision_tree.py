@@ -188,7 +188,7 @@ class Node:
         '''
         return acc_func(self.data)
 
-    def retrain_node(self, depth=None, train_method=None, disc_index=None, disc_func=disc_func.discrimination):
+    def retrain_node(self, depth=None, train_method=None, disc_index=None, disc_func=disc_func.discrimination, criterion='gini'):
         '''
         depth: max depth of new tree (None if use node's current height)
         stats: boolean prints statistics
@@ -199,7 +199,7 @@ class Node:
         '''
         if depth == None:
             depth = self.get_height()
-        fair_model = train.DecisionTreeFair(max_depth=depth-1,train_method=train_method, protected_index=disc_index)
+        fair_model = train.DecisionTreeFair(max_depth=depth-1,train_method=train_method, protected_index=disc_index, criterion=criterion)
         data = np.array(self.data)
         fair_model.fit(data[:,:-2], data[:,-2])
         return fair_model.get_nodes()

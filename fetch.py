@@ -1,9 +1,16 @@
 import numpy as np
+import pandas as pd
 from aif360.sklearn.datasets import fetch_adult
 from aif360.sklearn.datasets import fetch_bank
 from aif360.sklearn.datasets import fetch_compas
 from aif360.sklearn.datasets import fetch_german
 from aif360.sklearn.datasets import fetch_meps
+
+def convert_features_to_one_hot(df, feature_name_list):
+  for feature_name in feature_name_list:
+    df = pd.get_dummies(df, columns=[feature_name])
+  
+  return df
 
 def adult():
     # Fetching adult dataset
@@ -74,4 +81,46 @@ def german(disc="foreign"):
     # Binary Age
     # disc_index = 4 # Age (1: >=25, 0: <25)
     # X[:,4] = X[:,4] >= 25
+    return X, y, Xy, columns, class_names, disc_index
+
+def credit(disc="sex", file='data/default_credit.csv'):
+    # fetching credit default dataset
+    # https://archive.ics.uci.edu/ml/datasets/default+of+credit+card+clients
+    df = pd.read_csv(file)
+    
+    # [LIMIT_BAL, SEX, EDUCATION, MARRIAGE, AGE, PAY_0, PAY_2, PAY_3, PAY_4, PAY_5, PAY_6, BILL_AMT1, BILL_AMT2, BILL_AMT3, BILL_AMT4, BILL_AMT5, BILL_AMT6, PAY_AMT1, PAY_AMT2, PAY_AMT3, PAY_AMT4, PAY_AMT5, PAY_AMT6, default payment next month]
+    columns = list(df.columns)
+    credit = df.to_numpy()
+    X = credit[:,:-1]
+    X[:,1]=np.abs((X[:,1]-1)-1)
+    X[:,2] = X[:, 2]<=1
+    y = np.abs(credit[:,-1]-1)
+    Xy = np.append(X, y[:, None], axis=1)
+    class_names = ["Defaulted", "Not Defaulted"]
+    if disc == 'sex':
+        disc_index = 1 # sex (1: Male, 0: Female)
+    else:
+        disc_index = 2 # marital (1: Married, 0: Other)
+    return X, y, Xy, columns, class_names, disc_index
+
+def fraud(file='data/bank_fraud.csv'):
+    # fetching bank fraud dataset
+    # https://www.kaggle.com/datasets/sgpjesus/bank-account-fraud-dataset-neurips-2022
+    df = pd.read_csv(file)
+    df = convert_features_to_one_hot(df, ['payment_type','employment_status','housing_status','source','device_os'])
+    # [income,name_email_similarity,prev_address_months_count,current_address_months_count,customer_age,days_since_request,intended_balcon_amount,payment_type,zip_count_4w,velocity_6h,velocity_24h,velocity_4w,bank_branch_count_8w,date_of_birth_distinct_emails_4w,employment_status,credit_risk_score,email_is_free,housing_status,phone_home_valid,phone_mobile_valid,bank_months_count,has_other_cards,proposed_credit_limit,foreign_request,source,session_length_in_minutes,device_os,keep_alive_session,device_distinct_emails_8w,device_fraud_count,month]
+    # ['income', 'name_email_similarity', 'prev_address_months_count', 'current_address_months_count', 'customer_age', 'days_since_request', 'intended_balcon_amount', 'zip_count_4w', 'velocity_6h', 'velocity_24h', 'velocity_4w', 'bank_branch_count_8w', 'date_of_birth_distinct_emails_4w', 'credit_risk_score', 'email_is_free', 'phone_home_valid', 'phone_mobile_valid', 'bank_months_count', 'has_other_cards', 'proposed_credit_limit', 'foreign_request', 'session_length_in_minutes', 'keep_alive_session', 'device_distinct_emails_8w', 'device_fraud_count', 'month', 'payment_type_AA', 'payment_type_AB', 'payment_type_AC', 'payment_type_AD', 'payment_type_AE', 'employment_status_CA', 'employment_status_CB', 'employment_status_CC', 'employment_status_CD', 'employment_status_CE', 'employment_status_CF', 'employment_status_CG', 'housing_status_BA', 'housing_status_BB', 'housing_status_BC', 'housing_status_BD', 'housing_status_BE', 'housing_status_BF', 'housing_status_BG', 'source_INTERNET', 'source_TELEAPP', 'device_os_linux', 'device_os_macintosh', 'device_os_other', 'device_os_windows', 'device_os_x11']
+    columns = list(df.columns)
+    credit = df.to_numpy()
+    fraud_index = np.nonzero(credit[:,0]==1)[0]
+    non_fraud_index = np.nonzero(credit[:,0]==0)[0]
+    random_nfraud = np.random.choice(non_fraud_index, size=fraud_index.shape[0])
+    combined_index = np.append(fraud_index, random_nfraud, axis=0)
+    X = credit[combined_index,1:]
+    # Binary Age
+    X[:,4] = X[:, 4]<=30
+    y = np.abs(credit[combined_index,0]-1)
+    Xy = np.append(X, y[:, None], axis=1)
+    class_names = ["Fraud", "No Fraud"]
+    disc_index = 4 # sex (1: <=30 years, 0: >30 years)
     return X, y, Xy, columns, class_names, disc_index
