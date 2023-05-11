@@ -6,7 +6,7 @@ import disc_func
 from sklearn import tree
 
 class Node:
-    def __init__(self, leaf=None, feature=None, threshold=None, greater_node=None, less_node=None, data=None, gain=None):
+    def __init__(self, leaf=None, feature=None, threshold=None, greater_node=None, less_node=None, data=None, gain=None, id=None):
         '''
         leaf: predicted class or None (if not leaf)
         feature: index of data node is comparing
@@ -30,7 +30,11 @@ class Node:
             self.data = data
         self.height = None
         self.gain = gain
-        self.unique_id = np.random.random((1))[0]
+        if id == None:
+            self.unique_id = np.random.random((1))[0]
+        else:
+            self.unique_id = id
+        self.disc_data = np.zeros(shape=(2,2,2)) # protected, class, prediction
     
     def add_greater_node(self, greater_node):
         self.greater_node = greater_node
@@ -65,7 +69,7 @@ class Node:
             return "{\"discrimination\":\""+str(round(self.discrimination(disc_index, disc_func), 3))+"\", \"accuracy\":\""+str(round(self.accuracy(), 3))+"\",\"["+ str(self.feature)+"]\":\""+str(self.threshold)+"\", \"Left\":"+self.less_node.visual_json(disc_index, disc_func, attributes)+", \"Right\":"+self.greater_node.visual_json(disc_index, disc_func, attributes)+"}"
         return "{\"discrimination\":\""+str(round(self.discrimination(disc_index, disc_func), 3))+"\", \"accuracy\":\""+str(round(self.accuracy(), 3))+"\",\""+attributes[self.feature]+"\":\""+str(self.threshold)+"\", \"Left\":"+self.less_node.visual_json(disc_index, disc_func, attributes)+", \"Right\":"+self.greater_node.visual_json(disc_index, disc_func, attributes)+"}"
 
-    def add_data(self, data):
+    def add_data(self, data, disc_index):
         '''
         data: numpy array containing attributes and true class
         add_data: goes through the tree recursively appending data to each node with the predicted value
@@ -73,11 +77,13 @@ class Node:
         '''
         if not self.is_leaf():
             if data[self.feature] <= self.threshold:
-                leaf = self.less_node.add_data(data)
+                leaf = self.less_node.add_data(data, disc_index)
             else:
-                leaf = self.greater_node.add_data(data)
+                leaf = self.greater_node.add_data(data, disc_index)
             data = np.append(data, leaf)
             self.data.append(data)
+            # print(data[disc_index], data[-2], leaf)
+            self.disc_data[int(data[disc_index]), int(data[-2]), int(leaf)] += 1
             return leaf
         else:
             data = np.append(data, self.leaf)
@@ -163,10 +169,10 @@ class Node:
             for datum in self.data:
                 data.append(np.copy(datum))
         if self.is_leaf():
-            copy = Node(self.leaf, self.feature, self.threshold, data=data)
+            copy = Node(self.leaf, self.feature, self.threshold, data=data, id=self.unique_id)
             return copy
         else:
-            copy = Node(self.leaf, self.feature, self.threshold, data=data)
+            copy = Node(self.leaf, self.feature, self.threshold, data=data, id=self.unique_id)
             if self.less_node != None:
                 copy.add_greater_node(self.greater_node.copy(copy_data))
             if self.greater_node != None:
@@ -188,7 +194,7 @@ class Node:
         '''
         return acc_func(self.data)
 
-    def retrain_node(self, root_data, depth=None, train_method=None, disc_index=None, disc_func=disc_func.discrimination, criterion='gini'):
+    def retrain_node(self, disc_data, depth=None, train_method=None, disc_index=None, disc_func=disc_func.discrimination, criterion='gini'):
         '''
         depth: max depth of new tree (None if use node's current height)
         stats: boolean prints statistics
@@ -199,9 +205,8 @@ class Node:
         '''
         if depth == None:
             depth = self.get_height()
-        fair_model = train.DecisionTreeFair(root_data, max_depth=depth-1,train_method=train_method, protected_index=disc_index, criterion=criterion)
-        data = np.array(self.data)
-        fair_model.fit(data[:,:-2], data[:,-2])
+        fair_model = train.DecisionTreeFair(disc_data, max_depth=depth-1,train_method=train_method, disc_index=disc_index)
+        fair_model.fit(np.array(self.data))
         return fair_model.get_nodes()
     
     def get_parent(self, unique_id, height=None):
@@ -284,7 +289,7 @@ def export_dict_rec(tree_text):
     tree.add_greater_node(export_dict_rec(tree_text[end+1:]))
     return tree
 
-def get_worst_node(dec_tree, target, disc_index, disc_func=disc_func.discrimination):
+def get_worst_node(dec_tree, target, disc_index, skip, disc_func=disc_func.discrimination):
     '''
     disc_index: index of discriminatory attribute
     disc_fun: function used for discrimination calculation
@@ -295,19 +300,25 @@ def get_worst_node(dec_tree, target, disc_index, disc_func=disc_func.discriminat
         return None
     worst_disc = dec_tree.discrimination(disc_index, disc_func)
     worst_node = dec_tree
+    if dec_tree.unique_id in skip:
+        # print('skip', dec_tree.unique_id, skip)
+        worst_disc = 999
+        worst_node = None
     if dec_tree.less_node != None:
-        less_node = get_worst_node(dec_tree.less_node, target, disc_index, disc_func)
+        less_node = get_worst_node(dec_tree.less_node, target, disc_index, skip, disc_func)
         if less_node != None and worst_disc > less_node.discrimination(disc_index, disc_func):
             worst_node = less_node
             worst_disc = less_node.discrimination(disc_index, disc_func)
     if dec_tree.greater_node != None:
-        greater_node = get_worst_node(dec_tree.greater_node, target, disc_index, disc_func)
+        greater_node = get_worst_node(dec_tree.greater_node, target, disc_index, skip, disc_func)
         if greater_node != None and worst_disc > greater_node.discrimination(disc_index, disc_func):
             worst_node = greater_node
             worst_disc = greater_node.discrimination(disc_index, disc_func)
+    # if worst_disc == 999:
+    #     print('no children')
     return worst_node
 
-def get_bad_nodes_child_method(dec_tree, comp, disc_index, disc_func=disc_func.discrimination):
+def get_bad_nodes_child_method(dec_tree, comp, disc_index, skip, disc_func=disc_func.discrimination):
     '''
     comp: discrimination score to be identified as bad (None sets comp to root's discrimination)
     disc_index: index of discriminatory attribute
@@ -324,7 +335,7 @@ def get_bad_nodes_child_method(dec_tree, comp, disc_index, disc_func=disc_func.d
         if (dec_tree.greater_node.is_leaf() and dec_tree.discrimination(disc_index, disc_func) < comp) or (not dec_tree.greater_node.is_leaf() and dec_tree.greater_node.discrimination(disc_index) < comp):
             return [dec_tree]
     if not dec_tree.less_node.is_leaf():
-        bad_nodes.extend(get_bad_nodes_child_method(dec_tree.less_node, comp, disc_index, disc_func))
+        bad_nodes.extend(get_bad_nodes_child_method(dec_tree.less_node, comp, disc_index, skip, disc_func))
     if not dec_tree.greater_node.is_leaf():
-        bad_nodes.extend(get_bad_nodes_child_method(dec_tree.greater_node, comp, disc_index, disc_func))
+        bad_nodes.extend(get_bad_nodes_child_method(dec_tree.greater_node, comp, disc_index, skip, disc_func))
     return bad_nodes
