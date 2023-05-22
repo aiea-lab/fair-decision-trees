@@ -13,6 +13,21 @@ def accuracy(data):
             correct+=1
     return correct / len(data)
 
+def disc_fast(data):
+    return statParity_equalOdds_fast(data)
+
+def statParity_equalOdds_fast(data):
+    '''
+    data: 3d array-like
+    protectedIndex: int index of the protected class
+    return average of statistical parity and Equalized odds
+    '''
+    if data.size == 0 or np.sum(data[0,:,:]) == 0 or np.sum(data[1,:,:])==0 or np.sum(data[1,1,:]) == 0 or np.sum(data[0,1,:]) == 0:
+        return -1000
+    spd = np.sum(data[0,:,1])/np.sum(data[0,:,:])-np.sum(data[1,:,1])/np.sum(data[1,:,:])
+    eod = np.sum(data[0,1,1])/np.sum(data[0,1,:])-np.sum(data[1,1,1])/np.sum(data[1,1,:])
+    return (spd+eod)/2
+
 def statisticalParity(data, protectedIndex):
     '''
     data: 2d array-like

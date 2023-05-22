@@ -4,6 +4,7 @@ from sklearn.metrics import accuracy_score
 import train
 import disc_func
 from sklearn import tree
+import time
 
 class Node:
     def __init__(self, leaf=None, feature=None, threshold=None, greater_node=None, less_node=None, data=None, gain=None, id=None):
@@ -44,6 +45,11 @@ class Node:
     
     def is_leaf(self):
         return self.leaf != None
+    
+    def __eq__(self,obj):
+        if obj == None:
+            return False
+        return self.unique_id == obj.unique_id
 
     def __repr__(self):
         if self.is_leaf():
@@ -55,6 +61,14 @@ class Node:
             return "{class="+str(self.leaf)+"}"
         return "{"+str(self.feature)+"<="+str(self.threshold)+":"+str(self.less_node)+","+str(self.feature)+"<="+str(self.threshold)+":"+str(self.greater_node)+"}"
     
+    def __add__(self, x):
+        if isinstance(x, Node):
+            return x.unique_id+self.unique_id
+        return x+self.unique_id
+    
+    def __radd__(self, x):
+        return x+self.unique_id
+    
     def export_json(self, attributes=None):
         if self.is_leaf():
             return {"class":self.leaf}
@@ -62,12 +76,17 @@ class Node:
             return {str(self.feature)+"<="+str(self.threshold):self.less_node.export_json(), str(self.feature)+">"+str(self.threshold):self.greater_node.export_json()}
         return {attributes[self.feature]+"<="+str(self.threshold):self.less_node.export_json(attributes), attributes[self.feature]+">"+str(self.threshold):self.greater_node.export_json(attributes)}
 
-    def visual_json(self, disc_index, disc_func=disc_func.discrimination, attributes=None):
+    def visual_json(self, disc_index, disc_func=disc_func.discrimination, attributes=None, highlight=[]):
+        node_str = "{"
+        if self in highlight:
+            node_str += "\"Highlight\":\"TRUE\", "
         if self.is_leaf():
-            return "{\"class\":"+str(self.leaf)+"}"
+            node_str += "\"class\":"+str(self.leaf)+"}"
+            return node_str
         if attributes == None:
-            return "{\"discrimination\":\""+str(round(self.discrimination(disc_index, disc_func), 3))+"\", \"accuracy\":\""+str(round(self.accuracy(), 3))+"\",\"["+ str(self.feature)+"]\":\""+str(self.threshold)+"\", \"Left\":"+self.less_node.visual_json(disc_index, disc_func, attributes)+", \"Right\":"+self.greater_node.visual_json(disc_index, disc_func, attributes)+"}"
-        return "{\"discrimination\":\""+str(round(self.discrimination(disc_index, disc_func), 3))+"\", \"accuracy\":\""+str(round(self.accuracy(), 3))+"\",\""+attributes[self.feature]+"\":\""+str(self.threshold)+"\", \"Left\":"+self.less_node.visual_json(disc_index, disc_func, attributes)+", \"Right\":"+self.greater_node.visual_json(disc_index, disc_func, attributes)+"}"
+            node_str += "\"discrimination\":\""+str(round(self.discrimination(disc_index, disc_func), 3))+"\", \"accuracy\":\""+str(round(self.accuracy(), 3))+"\",\"["+ str(self.feature)+"]\":\""+str(self.threshold)+"\", \"Left\":"+self.less_node.visual_json(disc_index, disc_func, attributes, highlight)+", \"Right\":"+self.greater_node.visual_json(disc_index, disc_func, attributes, highlight)+"}"
+            return node_str
+        return node_str + "\"discrimination\":\""+str(round(self.discrimination(disc_index, disc_func), 3))+"\", \"accuracy\":\""+str(round(self.accuracy(), 3))+"\",\""+attributes[self.feature]+"\":\""+str(self.threshold)+"\", \"Left\":"+self.less_node.visual_json(disc_index, disc_func, attributes, highlight)+", \"Right\":"+self.greater_node.visual_json(disc_index, disc_func, attributes, highlight)+"}"
 
     def add_data(self, data, disc_index):
         '''
@@ -88,6 +107,7 @@ class Node:
         else:
             data = np.append(data, self.leaf)
             self.data.append(data)
+            self.disc_data[int(data[disc_index]), int(data[-2]), int(self.leaf)] += 1
             return self.leaf
         
     def get_prediction(self, data):
@@ -194,7 +214,7 @@ class Node:
         '''
         return acc_func(self.data)
 
-    def retrain_node(self, disc_data, depth=None, train_method=None, disc_index=None, disc_func=disc_func.discrimination, criterion='gini'):
+    def retrain_node(self, disc_data, depth=None, train_method=None, disc_index=None, disc_func=disc_func.discrimination, criterion='gini', disc_coef=2, acc_coef=1):
         '''
         depth: max depth of new tree (None if use node's current height)
         stats: boolean prints statistics
@@ -205,7 +225,7 @@ class Node:
         '''
         if depth == None:
             depth = self.get_height()
-        fair_model = train.DecisionTreeFair(disc_data, max_depth=depth-1,train_method=train_method, disc_index=disc_index)
+        fair_model = train.DecisionTreeFair(disc_data, max_depth=depth-1,train_method=train_method, disc_index=disc_index, disc_coef=disc_coef, acc_coef=acc_coef)
         fair_model.fit(np.array(self.data))
         return fair_model.get_nodes()
     
@@ -253,7 +273,30 @@ class Node:
             self.greater_node.simplify()
             if self.less_node.leaf != None and self.less_node.leaf == self.greater_node.leaf:
                 self.leaf = self.less_node.leaf
+    
+    def simplify_children(self, children, id=None):
+        '''
+        children: List of nodes
+        return: simplified list of parents
+        '''
+        if self.is_leaf():
+            return children
+        children = self.less_node.simplify_children(children)
+        children = self.greater_node.simplify_children(children)
         
+        if id == None:
+            id = []
+            for child in children:
+                id.append(child.unique_id)
+        try:
+            less_index = id.index(self.less_node.unique_id)
+            greater_index = id.index(self.greater_node.unique_id)
+            children.pop(max(less_index, greater_index))
+            children.pop(min(less_index, greater_index))
+            children.append(self)
+        except ValueError:
+            pass
+        return children
 
 def export_dict(clf):
     '''
@@ -317,6 +360,147 @@ def get_worst_node(dec_tree, target, disc_index, skip, disc_func=disc_func.discr
     # if worst_disc == 999:
     #     print('no children')
     return worst_node
+
+def get_bad_nodes_root_method(dec_tree, root_data=None, disc_func=disc_func.disc_fast, threshold=0, timeout=5, top=3, prop_thresh=0.4):
+    if root_data == None: # dec tree is root
+        root_data = dec_tree.disc_data
+    leafs = dec_tree.get_leafs()
+    # print(root_data)
+    # sum = np.zeros((2,2,2))
+    # for leaf in leafs:
+    #     sum += leaf.disc_data
+    # print(sum)
+    best_leafs, num_data = _get_bad_nodes_root_method(np.copy(root_data), leafs, 0, disc_func, threshold, timeout, top, completed=[], id_sum=0, root_size=np.sum(root_data), prop_thresh=prop_thresh)
+    print(num_data, np.sum(dec_tree.disc_data))
+    # for leaf in best_leafs:
+    #     print(np.sum(leaf.disc_data))
+    return dec_tree.simplify_children(best_leafs)
+
+    # combine leafs
+
+def get_bad_nodes_root_method_bfs(dec_tree, root_data=None, disc_func=disc_func.disc_fast, threshold=0, timeout=5, top=3, prop_thresh=0.4):
+    start_time = time.time()
+    queue = []
+    root_data = dec_tree.disc_data
+    root_size = np.sum(root_data)
+    root_leafs = dec_tree.get_leafs()
+    best_leafs = []
+    best_score = float('inf')
+    best_disc = 0 # not best disc
+    completed_id = [np.sum(root_leafs)]
+    queue.append((root_data, root_leafs, 0))
+    count = 0
+    while len(queue) > 0:
+        if time.time()-start_time >= timeout:
+            print('timeout')
+            break
+        count += 1
+        data, leafs, score = queue.pop(0)
+        new_results = _get_bad_nodes_root_method_bfs(data, leafs, score, disc_func, top)
+        for new_result in new_results:
+            new_data, new_leafs, new_score = new_result
+            disc = disc_func(new_data)
+            if disc >= threshold:
+                # print('root_disc:',disc, new_score/root_size)
+                if new_score < best_score: # minimize
+                    best_leafs = []
+                    for leaf in root_leafs:
+                        if leaf not in new_leafs:
+                            best_leafs.append(leaf)
+                    best_score = new_score
+                    best_disc = disc
+            else:
+                if len(new_leafs) > 1:
+                    id_sum = np.sum(new_leafs)
+                else:
+                    id_sum = -1
+                if not(1-(np.sum(new_data)/root_size) > prop_thresh or len(leafs)==0 or disc<=-100 or id_sum in completed_id):
+                    queue.append(new_result)
+                    completed_id.append(id_sum)
+    print('bad_nodes took:', time.time()-start_time, 'seconds', count, 'iterations')
+    print('root_disc:',best_disc, best_score)
+    return dec_tree.simplify_children(best_leafs)
+
+def _get_bad_nodes_root_method_bfs(root_data, leafs, increment_score, disc_func, top):
+    # requires: [(new data, available_leafs, sort_score)]
+    root_disc = disc_func(root_data)
+    # root_acc = (np.sum(root_data[:,0,0])+np.sum(root_data[:,1,1]))/np.sum(root_data[:,:,:])
+    remaining_data = []
+    delta_disc = []
+    new_data = []
+    for leaf in leafs:
+        new_root_data = root_data-leaf.disc_data
+        new_data.append(new_root_data)
+        delta_disc.append(disc_func(new_root_data)-root_disc)
+    sorted_leafs = list(zip(leafs, new_data))
+    sorted_leafs = [elem for i,elem in sorted(enumerate(sorted_leafs), 
+                                          key=lambda x:delta_disc[x[0]], reverse=True)]
+    for i in range(top):
+        # could add must be positive disc
+        if i >= len(sorted_leafs):
+            break
+        new_root_data = sorted_leafs[i][1]
+        new_leafs = []
+        for j in range(len(sorted_leafs)):
+            if i != j:
+                new_leafs.append(sorted_leafs[j][0])
+        # new_leafs.pop(0)
+        # new_increment_score = increment_score+np.sum(sorted_leafs[i][0].disc_data) # total datapoints
+        new_increment_score = -(np.sum(new_root_data[:,0,0])+np.sum(new_root_data[:,1,1]))/np.sum(new_root_data[:,:,:]) # accuracy
+        remaining_data.append((new_root_data, new_leafs, new_increment_score))
+    return remaining_data
+
+def _get_bad_nodes_root_method(root_data, leafs, num_data, disc_func, threshold, timeout, top, completed, id_sum, root_size, prop_thresh):
+    start = time.time()
+    root_disc = disc_func(root_data)
+    root_acc = (np.sum(root_data[:,0,0])+np.sum(root_data[:,1,1]))/np.sum(root_data[:,:,:])
+    if root_disc >= threshold:
+        print('root_disc:',root_disc, 1-(np.sum(root_data)/root_size), root_acc)
+        return [], -root_acc
+    if not leafs or root_disc<=-100:
+        return [], -1
+    if 1-(np.sum(root_data)/root_size) > prop_thresh:
+        return [], -1
+    best_leafs = []
+    least_data = float('inf')
+    delta_disc = []
+    new_data = []
+    for leaf in leafs:
+        new_root_data = root_data-leaf.disc_data
+        new_data.append(new_root_data)
+        delta_disc.append(disc_func(new_root_data)-root_disc)
+    sorted_leafs = list(zip(leafs, new_data))
+    sorted_leafs = [elem for i,elem in sorted(enumerate(sorted_leafs), 
+                                          key=lambda x:delta_disc[x[0]], reverse=True)]
+    for i in range(top):
+        if time.time()-start > timeout:
+            print('timeout')
+            break
+        # could add must be positive disc
+        if i >= len(sorted_leafs):
+            break
+        new_id_sum = id_sum+sorted_leafs[i][0].unique_id
+        if new_id_sum in completed:
+            print('inside')
+            continue
+        new_root_data = sorted_leafs[i][1]
+        
+        new_leafs = []
+        for sorted_leaf in sorted_leafs[i:]:
+            new_leafs.append(sorted_leaf[0])
+        new_leafs.pop(0)
+        completed.append(new_id_sum)
+        tmp_leafs, tmp_data = _get_bad_nodes_root_method(np.copy(new_root_data), new_leafs, num_data+np.sum(sorted_leafs[i][0].disc_data), disc_func, threshold, timeout-(time.time()-start), top, completed, new_id_sum,  root_size, prop_thresh)
+        if tmp_data == -1:
+            continue
+        if tmp_data < least_data:
+            tmp_leafs.append(sorted_leafs[i][0])
+            least_data = tmp_data
+            best_leafs = tmp_leafs
+    if least_data == float('inf'):
+        return [], -1
+    return best_leafs, least_data
+
 
 def get_bad_nodes_child_method(dec_tree, comp, disc_index, skip, disc_func=disc_func.discrimination):
     '''

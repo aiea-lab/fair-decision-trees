@@ -103,7 +103,7 @@ def credit(disc="sex", file='data/default_credit.csv'):
         disc_index = 2 # marital (1: Married, 0: Other)
     return X, y, Xy, columns, class_names, disc_index
 
-def fraud(file='data/bank_fraud.csv'):
+def fraud(file='data/bank_fraud.csv', seed=42):
     # fetching bank fraud dataset
     # https://www.kaggle.com/datasets/sgpjesus/bank-account-fraud-dataset-neurips-2022
     df = pd.read_csv(file)
@@ -112,6 +112,7 @@ def fraud(file='data/bank_fraud.csv'):
     # ['income', 'name_email_similarity', 'prev_address_months_count', 'current_address_months_count', 'customer_age', 'days_since_request', 'intended_balcon_amount', 'zip_count_4w', 'velocity_6h', 'velocity_24h', 'velocity_4w', 'bank_branch_count_8w', 'date_of_birth_distinct_emails_4w', 'credit_risk_score', 'email_is_free', 'phone_home_valid', 'phone_mobile_valid', 'bank_months_count', 'has_other_cards', 'proposed_credit_limit', 'foreign_request', 'session_length_in_minutes', 'keep_alive_session', 'device_distinct_emails_8w', 'device_fraud_count', 'month', 'payment_type_AA', 'payment_type_AB', 'payment_type_AC', 'payment_type_AD', 'payment_type_AE', 'employment_status_CA', 'employment_status_CB', 'employment_status_CC', 'employment_status_CD', 'employment_status_CE', 'employment_status_CF', 'employment_status_CG', 'housing_status_BA', 'housing_status_BB', 'housing_status_BC', 'housing_status_BD', 'housing_status_BE', 'housing_status_BF', 'housing_status_BG', 'source_INTERNET', 'source_TELEAPP', 'device_os_linux', 'device_os_macintosh', 'device_os_other', 'device_os_windows', 'device_os_x11']
     columns = list(df.columns)
     credit = df.to_numpy()
+    np.random.seed(seed)
     fraud_index = np.nonzero(credit[:,0]==1)[0]
     non_fraud_index = np.nonzero(credit[:,0]==0)[0]
     random_nfraud = np.random.choice(non_fraud_index, size=fraud_index.shape[0])
